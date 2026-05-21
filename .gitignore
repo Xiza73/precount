@@ -6,6 +6,10 @@ node_modules/
 dist/
 build/
 src-tauri/target/
+src-tauri/gen/
+
+# Tauri Cargo.lock — Tauri es app, normalmente se commitea. Lo dejamos
+# fuera del ignore (no listado acá) para que git lo tracke.
 
 # Tests / coverage
 coverage/
