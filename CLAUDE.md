@@ -12,24 +12,61 @@ El equipo NO es experto en contabilidad — los formatos y reglas de validación
 
 **Restricciones clave (no negociables):**
 
-- Los archivos de **entrada** (xls, csv) **NO se guardan** en disco — se procesan en memoria y se descartan.
-- El archivo de **salida** **TAMPOCO se persiste** — se devuelve al frontend como `base64` para que el usuario lo descargue.
-- La aplicación es **100% local**: sin red, sin servidor HTTP, sin base de datos, sin auth.
+- Los archivos de **entrada del flujo** (xls, csv que el usuario sube para transformar) **NO se guardan** en disco — se procesan en memoria y se descartan.
+- El archivo de **salida del flujo** **TAMPOCO se persiste** — se devuelve al frontend como `base64` para que el usuario lo descargue.
+- La aplicación es **100% local**: sin red, sin servidor HTTP, sin auth.
 - Plataforma objetivo: **Windows** (otras plataformas no descartadas, pero no priorizadas).
+
+**Excepción explícita a la regla "sin persistencia":** la app SÍ mantiene **estado propio** en disco (no archivos del usuario). Hoy aplica a:
+
+- **Plan de cuentas** del cliente: SQLite vía `tauri-plugin-sql` en `appDataDir()` (`%APPDATA%\precis\` en Windows). Justificación: es configuración de referencia de la empresa, no input del flujo.
+
+Cualquier nuevo dato persistido debe entrar en esta lista con justificación. Si dudás si algo es "archivo de flujo" o "estado propio" → asumí flujo (no persistir) y consultá.
 
 ## 2. Usuarios y alcance (MVP)
 
 **Usuario final:** asistente contable del cliente. Carga archivos Excel del ERP/punto-de-venta, completa datos manuales si faltan, descarga el XLS listo para SISCONT.
 
-**MVP — Módulo 1: Compras (Registro de Compras SUNAT)**
+**MVP — dos módulos en paralelo:**
+
+**Módulo `plan-de-cuentas`** (bloqueante para Compras y todos los siguientes):
+
+- CRUD de cuentas contables en SQLite local (form individual: crear / editar / eliminar).
+- Bulk import desde xls/csv (el cliente trae un archivo con su plan completo y se carga de una).
+- Modelo jerárquico PCGE (clases, grupos, subgrupos, cuentas, divisionarias) + cuentas customizadas de la empresa.
+- Validación de unicidad por código + jerarquía consistente.
+
+**Módulo `compras`** (Registro de Compras SUNAT, usa el plan de cuentas como referencia):
 
 - Carga de archivo de comprobantes de compra (xls/csv) en memoria.
 - Formulario manual para correcciones o entradas que no vinieron en el archivo.
-- Validaciones por columna (RUC, tipo de comprobante, fechas, montos).
-- Generación del XLS de salida con el layout exacto que importa SISCONT.
-- Descarga en el frontend (base64 → `Blob` → `a[download]`).
+- Validaciones por columna — todas en `src-tauri/src/domain/`:
+  - RUC (11 dígitos, módulo 11)
+  - Tipo de comprobante (FACTURA / BOLETA / NOTA_CREDITO)
+  - Serie + número
+  - Fechas y montos (base imponible, IGV, total)
+  - `cuenta_contable` debe existir en plan de cuentas
+- Generación del XLS de salida con el layout que importa SISCONT.
+- Descarga en el frontend (base64 → `Blob` → `<a download>`).
 
-**Diferido (post-MVP):** Ventas, Planillas, otros módulos SISCONT. La arquitectura debe ser **modular desde el día uno** para que sumar módulos sea trivial.
+**Columnas ficticias mínimas (Compras)** — hasta que el cliente nos pase el formato real:
+
+| # | Columna | Tipo | Validación |
+|---|---|---|---|
+| 1 | `fecha_emision` | Date `YYYY-MM-DD` | requerida |
+| 2 | `tipo_comprobante` | enum `FACTURA` / `BOLETA` / `NOTA_CREDITO` | requerida |
+| 3 | `serie` | string 1-4 chars | regex `^[A-Z0-9]{1,4}$` |
+| 4 | `numero` | string | requerido |
+| 5 | `ruc_proveedor` | string 11 dígitos | módulo 11 |
+| 6 | `razon_social` | string | requerida |
+| 7 | `base_imponible` | decimal (2 dec) | ≥ 0 |
+| 8 | `igv` | decimal (2 dec) | ≥ 0 |
+| 9 | `total` | decimal (2 dec) | = base_imponible + igv |
+| 10 | `cuenta_contable` | string | debe existir en plan de cuentas |
+
+> Estas columnas son **temporales**. Cuando el cliente entregue la plantilla real, reemplazar el schema en `src-tauri/src/domain/compras.rs` sin romper la arquitectura del módulo.
+
+**Diferido (post-MVP):** módulos Ventas, Planillas, otros SISCONT. La arquitectura debe ser **modular desde el día uno** para que sumar módulos sea trivial.
 
 ## 3. Stack y herramientas
 
@@ -45,6 +82,7 @@ El equipo NO es experto en contabilidad — los formatos y reglas de validación
 | Tests Rust       | `cargo test`                                   |
 | Tests E2E        | Playwright                                     |
 | Parsing xls      | `calamine` (read) + `rust_xlsxwriter` (write)  |
+| Persistencia local | `tauri-plugin-sql` (SQLite) — solo para plan de cuentas |
 
 ## 4. Comandos clave
 
@@ -99,21 +137,27 @@ pnpm test:e2e                                           # Playwright
 precis/
 ├── src/                       # Frontend React + TS
 │   ├── modules/
-│   │   └── compras/           # Módulo Compras (MVP)
+│   │   ├── plan-de-cuentas/   # CRUD + bulk import del plan
+│   │   └── compras/           # Registro de Compras SUNAT
 │   ├── components/            # Componentes compartidos
 │   ├── lib/                   # Helpers TS (validaciones, fechas, base64...)
 │   └── main.tsx
 ├── src-tauri/                 # Backend Rust + Tauri config
 │   ├── src/
 │   │   ├── commands/          # Tauri commands invocables desde JS
+│   │   │   ├── plan_de_cuentas.rs
 │   │   │   └── compras.rs
-│   │   ├── xls/               # Parsing + generación xls
-│   │   ├── domain/            # Tipos y reglas de negocio (RUC, comprobantes...)
+│   │   ├── domain/            # Tipos y reglas de negocio (RUC, comprobantes, cuenta...)
+│   │   ├── db/                # SQLite setup + migrations (solo plan de cuentas)
+│   │   ├── xls/               # Parsing + generación xls (in-memory)
+│   │   ├── lib.rs
 │   │   └── main.rs
 │   ├── Cargo.toml
 │   └── tauri.conf.json
-├── tests/                     # Tests Playwright E2E
+├── tests/e2e/                 # Tests Playwright E2E
 ├── biome.json
+├── playwright.config.ts
+├── vitest.config.ts
 ├── package.json
 └── tsconfig.json
 ```

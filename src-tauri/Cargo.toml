@@ -1,0 +1,32 @@
+[package]
+name = "precis"
+version = "0.0.1"
+description = "Generador de XLS para SISCONT"
+authors = ["Xiza73"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "precis_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+calamine = "0.26"
+rust_xlsxwriter = "0.79"
+
+[dev-dependencies]
+pretty_assertions = "1"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
