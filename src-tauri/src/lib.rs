@@ -19,6 +19,7 @@ pub fn run() {
             commands::depreciacion::generar_depreciacion_xls,
             commands::planilla::generar_planilla_xls,
             commands::planilla::resumir_planilla,
+            commands::detracciones::generar_detracciones_xls,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
