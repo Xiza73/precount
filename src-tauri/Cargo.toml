@@ -22,8 +22,9 @@ thiserror = "2"
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
 calamine = "0.26"
-rust_xlsxwriter = "0.79"
-base64 = "0.22"
+umya-spreadsheet = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
 
 [dev-dependencies]
 pretty_assertions = "1"

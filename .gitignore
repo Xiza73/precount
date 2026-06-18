@@ -7,6 +7,7 @@ dist/
 build/
 src-tauri/target/
 src-tauri/gen/
+*.tsbuildinfo
 
 # Tauri Cargo.lock — Tauri es app, normalmente se commitea. Lo dejamos
 # fuera del ignore (no listado acá) para que git lo tracke.

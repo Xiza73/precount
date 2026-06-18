@@ -2,7 +2,6 @@ use crate::{
     domain::{asiento::LineaAsiento, error::AppError},
     xls::{depreciacion::parse_depreciacion_xlsx, output::write_asientos},
 };
-use base64::{Engine, engine::general_purpose::STANDARD};
 
 #[tauri::command]
 pub async fn parse_depreciacion(
@@ -14,9 +13,9 @@ pub async fn parse_depreciacion(
     parse_depreciacion_xlsx(&bytes, mes, anio, tipo_cambio)
 }
 
-/// Devuelve el XLS final en base64 listo para descargar desde el frontend.
+/// Devuelve los bytes del XLS final. El frontend abre un save dialog y los
+/// escribe vía tauri-plugin-fs — el binario nunca toca disco.
 #[tauri::command]
-pub async fn generar_depreciacion_xls(lineas: Vec<LineaAsiento>) -> Result<String, AppError> {
-    let bytes = write_asientos(&lineas)?;
-    Ok(STANDARD.encode(bytes))
+pub async fn generar_depreciacion_xls(lineas: Vec<LineaAsiento>) -> Result<Vec<u8>, AppError> {
+    write_asientos(&lineas)
 }
