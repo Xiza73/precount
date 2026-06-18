@@ -1,9 +1,11 @@
 use crate::domain::{
     asiento::LineaAsiento,
     error::AppError,
-    fecha::{nombre_mes, ultimo_dia_mes},
+    fecha::{nombre_mes, ultimo_dia_mes, validar_mes},
 };
-use serde::Deserialize;
+use calamine::{Data, Range, Reader, Sheets};
+use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 const ORIGEN: &str = "11";
 const DOC: &str = "00";
@@ -144,6 +146,151 @@ pub fn construir_planilla(input: &AsientoPlanillaInput) -> Result<Vec<LineaAsien
     }
 
     Ok(lineas)
+}
+
+/// Resumen de campos derivables del xls de planilla del cliente.
+/// Los campos no derivables (vacaciones, ESSALUD final, gratif efectiva,
+/// bonif, EPS, CTS) NO se incluyen — los completa el contador a mano.
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResumenPlanilla {
+    pub sueldos: f64,
+    pub afp: f64,
+    pub ir_5ta: f64,
+    pub neto: f64,
+    pub adelantos: f64,
+}
+
+/// Pre-carga de campos del form a partir del xls (legacy .xls o .xlsx).
+/// Devuelve 0 en cada campo que no logró extraer — no falla por sheets faltantes.
+pub fn resumir_planilla_xls(
+    bytes: &[u8],
+    mes: u8,
+    anio: i32,
+) -> Result<ResumenPlanilla, AppError> {
+    validar_mes(mes)?;
+    let cursor = Cursor::new(bytes.to_vec());
+    let mut book: Sheets<Cursor<Vec<u8>>> = calamine::open_workbook_auto_from_rs(cursor)
+        .map_err(|e: calamine::Error| AppError::Xls(e.to_string()))?;
+
+    let nombre = nombre_mes(mes)?;
+    let sheet_names = book.sheet_names().to_vec();
+
+    let mut r = ResumenPlanilla::default();
+
+    // Sheet de planilla del mes: nombre del mes (DICIEMBRE, ENERO, ...).
+    if let Some(sn) = sheet_names
+        .iter()
+        .find(|n| n.trim().eq_ignore_ascii_case(nombre))
+    {
+        if let Ok(rng) = book.worksheet_range(sn) {
+            let (s, a) = extraer_de_planilla_sheet(&rng);
+            r.sueldos = s;
+            r.afp = a;
+        }
+    }
+
+    // Sheet R. QUINTA del año.
+    let prefix_quinta = format!("R. QUINTA {anio}");
+    if let Some(sn) = sheet_names
+        .iter()
+        .find(|n| n.trim().to_uppercase().starts_with(&prefix_quinta))
+    {
+        if let Ok(rng) = book.worksheet_range(sn) {
+            r.ir_5ta = extraer_ir_5ta(&rng, nombre);
+        }
+    }
+
+    // Boletas: sheets nombradas con números puros ("1", "2", ...).
+    for sn in &sheet_names {
+        if sn.trim().parse::<u32>().is_ok() {
+            if let Ok(rng) = book.worksheet_range(sn) {
+                let (n, a) = extraer_de_boleta(&rng);
+                r.neto += n;
+                r.adelantos += a;
+            }
+        }
+    }
+
+    Ok(r)
+}
+
+fn read_num(rng: &Range<Data>, row: u32, col: u32) -> f64 {
+    match rng.get_value((row, col)) {
+        Some(Data::Float(f)) => *f,
+        Some(Data::Int(i)) => *i as f64,
+        _ => 0.0,
+    }
+}
+
+fn read_str<'a>(rng: &'a Range<Data>, row: u32, col: u32) -> Option<&'a str> {
+    match rng.get_value((row, col)) {
+        Some(Data::String(s)) => Some(s.as_str()),
+        _ => None,
+    }
+}
+
+/// Sheet `DICIEMBRE` (o el mes): fila TOTAL en col 3 (idx 2). Sueldos = básico + asig fam
+/// de esa fila. AFP = subtotal de la fila inmediatamente siguiente, col 26 (idx 25).
+fn extraer_de_planilla_sheet(rng: &Range<Data>) -> (f64, f64) {
+    let last_row = rng.end().map(|(r, _)| r).unwrap_or(0);
+    let mut total_row: Option<u32> = None;
+    for r in 0..=last_row {
+        if let Some(s) = read_str(rng, r, 2) {
+            if s.trim().eq_ignore_ascii_case("TOTAL") {
+                total_row = Some(r);
+                break;
+            }
+        }
+    }
+    let Some(r) = total_row else {
+        return (0.0, 0.0);
+    };
+    let sueldo_basico = read_num(rng, r, 10); // col 11 (1-idx) = idx 10
+    let asig_fam = read_num(rng, r, 13); // col 14 = idx 13
+    let afp = read_num(rng, r + 1, 25); // fila siguiente, col 26 = idx 25
+    (sueldo_basico + asig_fam, afp)
+}
+
+/// Sheet `R. QUINTA {anio}`: hacia el final del sheet hay una sección por mes con la
+/// retención de cada trabajador en cols 3 / 6 / 9 (idx 2 / 5 / 8). Suma absoluta.
+fn extraer_ir_5ta(rng: &Range<Data>, nombre_mes_upper: &str) -> f64 {
+    let last_row = rng.end().map(|(r, _)| r).unwrap_or(0);
+    for r in 0..=last_row {
+        if let Some(s) = read_str(rng, r, 1) {
+            if s.trim().eq_ignore_ascii_case(nombre_mes_upper) {
+                let v1 = read_num(rng, r, 2).abs();
+                let v2 = read_num(rng, r, 5).abs();
+                let v3 = read_num(rng, r, 8).abs();
+                // Filtrar el match dentro de la tabla de ingresos (que también tiene
+                // los meses pero con números positivos altos en col 3).
+                // En la sección de retenciones los valores son chicos (< 1000 típico).
+                if v1 < 5000.0 && v2 < 5000.0 && v3 < 5000.0 {
+                    return v1 + v2 + v3;
+                }
+            }
+        }
+    }
+    0.0
+}
+
+/// Cada boleta: busca filas con label "Neto a Pagar" (col 9 = idx 8) y código "0706"
+/// (col 8 = idx 7). Suma ambos a lo largo de la sheet.
+fn extraer_de_boleta(rng: &Range<Data>) -> (f64, f64) {
+    let last_row = rng.end().map(|(r, _)| r).unwrap_or(0);
+    let mut neto = 0.0;
+    let mut adelantos = 0.0;
+    for r in 0..=last_row {
+        if let Some(s) = read_str(rng, r, 1) {
+            let s_trim = s.trim();
+            if s_trim.eq_ignore_ascii_case("Neto a Pagar") {
+                neto += read_num(rng, r, 8);
+            } else if s_trim == "0706" {
+                adelantos += read_num(rng, r, 7);
+            }
+        }
+    }
+    (neto, adelantos)
 }
 
 fn debe(
@@ -305,6 +452,25 @@ mod tests {
         input.neto = 9999.99; // rompe la suma
         let err = construir_planilla(&input).unwrap_err();
         assert!(err.to_string().contains("PLANILLA"));
+    }
+
+    /// Valida contra el xls real del cliente. Solo corre con `cargo test --ignored`
+    /// porque el archivo no se commitea (gitignored por data sensible).
+    #[test]
+    #[ignore]
+    fn resumir_diciembre_2025_extrae_valores_del_input() {
+        let bytes = std::fs::read("../public/input-planilla.xls").expect("input local");
+        let r = resumir_planilla_xls(&bytes, 12, 2025).expect("resumir ok");
+        assert!((r.sueldos - 9295.0).abs() < 0.01, "sueldos={}", r.sueldos);
+        assert!((r.afp - 580.05).abs() < 0.01, "afp={}", r.afp);
+        // IR 5ta: 152.20 + 24.73 = 176.93; el cliente puso 176.96 (dif 0.03 por redondeo)
+        assert!(
+            (r.ir_5ta - 176.93).abs() < 0.05,
+            "ir_5ta={} (esperado ~176.93)",
+            r.ir_5ta
+        );
+        assert!((r.neto - 7665.47).abs() < 0.01, "neto={}", r.neto);
+        assert!((r.adelantos - 872.52).abs() < 0.01, "adelantos={}", r.adelantos);
     }
 
     #[test]

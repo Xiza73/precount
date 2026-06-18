@@ -54,6 +54,41 @@ export function PlanillaModule() {
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((prev) => ({ ...prev, [k]: v }));
 
+  async function onCargarXls(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+      const r = await invoke<{
+        sueldos: number;
+        afp: number;
+        ir5ta: number;
+        neto: number;
+        adelantos: number;
+      }>("resumir_planilla", { bytes, mes: f.mes, anio: f.anio });
+      const fmt = (v: number) => (v > 0 ? v.toFixed(2) : "");
+      setF((prev) => ({
+        ...prev,
+        sueldos: fmt(r.sueldos),
+        afp: fmt(r.afp),
+        ir5ta: fmt(r.ir5ta),
+        neto: fmt(r.neto),
+        adelantos: fmt(r.adelantos),
+      }));
+      setInfo(
+        "Cargado del xls. Editá lo que falte (vacaciones, ESSALUD, gratif, bonif, EPS, CTS).",
+      );
+    } catch (err) {
+      setError(typeof err === "string" ? err : JSON.stringify(err));
+    } finally {
+      setBusy(false);
+      e.target.value = "";
+    }
+  }
+
   async function onGenerar() {
     setBusy(true);
     setError(null);
@@ -108,6 +143,13 @@ export function PlanillaModule() {
         Ingresá los montos ya calculados de cada voucher. Dejá en blanco los que no apliquen.
         Validamos partida doble por voucher antes de generar el XLS.
       </p>
+
+      <div className="form-row">
+        <label>
+          Cargar xls (opcional)&nbsp;
+          <input type="file" accept=".xls,.xlsx" onChange={onCargarXls} disabled={busy} />
+        </label>
+      </div>
 
       <div className="form-row">
         <label>
