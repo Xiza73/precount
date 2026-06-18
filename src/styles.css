@@ -38,6 +38,12 @@ body {
   letter-spacing: 0.02em;
 }
 
+.app-logo {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
 .app-nav {
   display: flex;
   gap: 0.5rem;

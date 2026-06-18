@@ -27,46 +27,30 @@ Cualquier nuevo dato persistido debe entrar en esta lista con justificación. Si
 
 **Usuario final:** asistente contable del cliente. Carga archivos Excel del ERP/punto-de-venta, completa datos manuales si faltan, descarga el XLS listo para SISCONT.
 
-**MVP — dos módulos en paralelo:**
+**Hallazgo clave validado contra outputs reales:** **TODOS** los XLS de salida tienen el **mismo schema de 42 columnas** (`Origen`, `Num.Voucher`, `Fecha`, `Cuenta`, `Monto Debe`, `Monto Haber`, …). Lo único que cambia entre módulos es (1) el código `Origen`, (2) qué cuentas usar en Debe/Haber, (3) el parser del input.
 
-**Módulo `plan-de-cuentas`** (bloqueante para Compras y todos los siguientes):
+Por eso el MVP NO es "Compras SUNAT". Son **N transformadores** del input específico de cada caso → `Vec<LineaAsiento>` → un único generador XLS común.
 
-- CRUD de cuentas contables en SQLite local (form individual: crear / editar / eliminar).
-- Bulk import desde xls/csv (el cliente trae un archivo con su plan completo y se carga de una).
-- Modelo jerárquico PCGE (clases, grupos, subgrupos, cuentas, divisionarias) + cuentas customizadas de la empresa.
-- Validación de unicidad por código + jerarquía consistente.
+**Módulo `plan-de-cuentas`** (referencia para validar `cuenta` en cualquier asiento):
 
-**Módulo `compras`** (Registro de Compras SUNAT, usa el plan de cuentas como referencia):
+- CRUD de cuentas contables en SQLite local (form individual + bulk import xls/csv).
+- Seed genérico (`src-tauri/src/db/seed.rs`) con las cuentas que aparecen en los outputs reales — permite seguir sin esperar al cliente.
 
-- Carga de archivo de comprobantes de compra (xls/csv) en memoria.
-- Formulario manual para correcciones o entradas que no vinieron en el archivo.
-- Validaciones por columna — todas en `src-tauri/src/domain/`:
-  - RUC (11 dígitos, módulo 11)
-  - Tipo de comprobante (FACTURA / BOLETA / NOTA_CREDITO)
-  - Serie + número
-  - Fechas y montos (base imponible, IGV, total)
-  - `cuenta_contable` debe existir en plan de cuentas
-- Generación del XLS de salida con el layout que importa SISCONT.
-- Descarga en el frontend (base64 → `Blob` → `<a download>`).
+**Módulos de transformación a asiento contable SISCONT** (cada uno = una "fase" del MVP):
 
-**Columnas ficticias mínimas (Compras)** — hasta que el cliente nos pase el formato real:
+| Fase | Módulo | `Origen` | Input | Status |
+|------|--------|----------|-------|--------|
+| 2 | `depreciacion` | `14` | xlsx con cálculos | siguiente |
+| 3 | `planilla` | `11` | xls legacy de planilla | pendiente |
+| 4 | `detracciones` | `13` | PDF Banco de la Nación | pendiente |
+| 5 | `banca` | `07` | PDF estado de cuenta BCP | pendiente |
 
-| # | Columna | Tipo | Validación |
-|---|---|---|---|
-| 1 | `fecha_emision` | Date `YYYY-MM-DD` | requerida |
-| 2 | `tipo_comprobante` | enum `FACTURA` / `BOLETA` / `NOTA_CREDITO` | requerida |
-| 3 | `serie` | string 1-4 chars | regex `^[A-Z0-9]{1,4}$` |
-| 4 | `numero` | string | requerido |
-| 5 | `ruc_proveedor` | string 11 dígitos | módulo 11 |
-| 6 | `razon_social` | string | requerida |
-| 7 | `base_imponible` | decimal (2 dec) | ≥ 0 |
-| 8 | `igv` | decimal (2 dec) | ≥ 0 |
-| 9 | `total` | decimal (2 dec) | = base_imponible + igv |
-| 10 | `cuenta_contable` | string | debe existir en plan de cuentas |
+Cada módulo solo implementa `parse_input(bytes) → Vec<LineaAsiento>`. Reusan:
 
-> Estas columnas son **temporales**. Cuando el cliente entregue la plantilla real, reemplazar el schema en `src-tauri/src/domain/compras.rs` sin romper la arquitectura del módulo.
+- `src-tauri/src/domain/asiento.rs` — `LineaAsiento` (42 cols) + enum `Origen`.
+- `src-tauri/src/xls/output.rs::write_asientos` — generador XLS único, in-memory.
 
-**Diferido (post-MVP):** módulos Ventas, Planillas, otros SISCONT. La arquitectura debe ser **modular desde el día uno** para que sumar módulos sea trivial.
+**Diferido (post-MVP):** cualquier módulo nuevo (Ventas SUNAT, Letras, Caja Chica, etc.) entra como un caso más — la arquitectura es escalable por diseño.
 
 ## 3. Stack y herramientas
 
@@ -135,23 +119,32 @@ pnpm test:e2e                                           # Playwright
 
 ```
 precis/
+├── public/                    # Assets servidos por Vite (logo.png, etc.)
 ├── src/                       # Frontend React + TS
 │   ├── modules/
+│   │   ├── asientos/          # Tipos compartidos (LineaAsiento, Origen)
 │   │   ├── plan-de-cuentas/   # CRUD + bulk import del plan
-│   │   └── compras/           # Registro de Compras SUNAT
+│   │   ├── depreciacion/      # (futuro) transformador Origen=14
+│   │   ├── planilla/          # (futuro) transformador Origen=11
+│   │   ├── detracciones/      # (futuro) transformador Origen=13
+│   │   └── banca/             # (futuro) transformador Origen=07
 │   ├── components/            # Componentes compartidos
-│   ├── lib/                   # Helpers TS (validaciones, fechas, base64...)
+│   ├── lib/                   # Helpers TS
 │   └── main.tsx
 ├── src-tauri/                 # Backend Rust + Tauri config
 │   ├── src/
 │   │   ├── commands/          # Tauri commands invocables desde JS
-│   │   │   ├── plan_de_cuentas.rs
-│   │   │   └── compras.rs
-│   │   ├── domain/            # Tipos y reglas de negocio (RUC, comprobantes, cuenta...)
-│   │   ├── db/                # SQLite setup + migrations (solo plan de cuentas)
-│   │   ├── xls/               # Parsing + generación xls (in-memory)
+│   │   │   └── plan_de_cuentas.rs
+│   │   ├── domain/            # Tipos y reglas de negocio
+│   │   │   ├── asiento.rs     # LineaAsiento (42 cols) + Origen
+│   │   │   ├── cuenta.rs
+│   │   │   ├── error.rs
+│   │   │   └── ruc.rs         # validador módulo 11
+│   │   ├── db/                # SQLite + migrations + seed plan de cuentas
+│   │   ├── xls/               # Generador XLS único (write_asientos) + futuros parsers
 │   │   ├── lib.rs
 │   │   └── main.rs
+│   ├── capabilities/
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── tests/e2e/                 # Tests Playwright E2E
