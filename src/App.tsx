@@ -1,8 +1,15 @@
 import { DepreciacionModule } from "@/modules/depreciacion/DepreciacionModule";
 import { PlanCuentasModule } from "@/modules/plan-de-cuentas/PlanCuentasModule";
+import { PlanillaModule } from "@/modules/planilla/PlanillaModule";
 import { useState } from "react";
 
-type ModuleKey = "plan-de-cuentas" | "depreciacion";
+type ModuleKey = "plan-de-cuentas" | "depreciacion" | "planilla";
+
+const TABS: { key: ModuleKey; label: string }[] = [
+  { key: "plan-de-cuentas", label: "Plan de cuentas" },
+  { key: "depreciacion", label: "Depreciación" },
+  { key: "planilla", label: "Planilla" },
+];
 
 export function App() {
   const [active, setActive] = useState<ModuleKey>("depreciacion");
@@ -13,24 +20,22 @@ export function App() {
         <img src="/logo.png" alt="precis" className="app-logo" />
         <h1>precis</h1>
         <nav className="app-nav">
-          <button
-            type="button"
-            data-active={active === "plan-de-cuentas"}
-            onClick={() => setActive("plan-de-cuentas")}
-          >
-            Plan de cuentas
-          </button>
-          <button
-            type="button"
-            data-active={active === "depreciacion"}
-            onClick={() => setActive("depreciacion")}
-          >
-            Depreciación
-          </button>
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              data-active={active === t.key}
+              onClick={() => setActive(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
         </nav>
       </header>
       <main className="app-main">
-        {active === "plan-de-cuentas" ? <PlanCuentasModule /> : <DepreciacionModule />}
+        {active === "plan-de-cuentas" && <PlanCuentasModule />}
+        {active === "depreciacion" && <DepreciacionModule />}
+        {active === "planilla" && <PlanillaModule />}
       </main>
     </div>
   );

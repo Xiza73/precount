@@ -103,3 +103,55 @@ input[type="file"] {
   color: #ef6f6f;
   white-space: pre-wrap;
 }
+
+.voucher {
+  border: 1px solid #2a3142;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.voucher legend {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+  padding: 0 0.5rem;
+}
+
+.monto-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.35rem 0;
+  font-size: 0.875rem;
+}
+
+.monto-label span {
+  color: var(--color-muted);
+}
+
+.monto-label input {
+  background: #161a23;
+  color: var(--color-fg);
+  border: 1px solid #2a3142;
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  width: 9rem;
+  text-align: right;
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  color: #0a0d12;
+  border: none;
+  border-radius: 6px;
+  padding: 0.55rem 1.25rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
