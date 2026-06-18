@@ -40,8 +40,8 @@ Por eso el MVP NO es "Compras SUNAT". Son **N transformadores** del input espec�
 
 | Fase | Módulo | `Origen` | Input | Status |
 |------|--------|----------|-------|--------|
-| 2 | `depreciacion` | `14` | xlsx con cálculos | siguiente |
-| 3 | `planilla` | `11` | xls legacy de planilla | pendiente |
+| 2 | `depreciacion` | `14` | xlsx con cálculos | implementado |
+| 3 | `planilla` | `11` | xls legacy de planilla | siguiente |
 | 4 | `detracciones` | `13` | PDF Banco de la Nación | pendiente |
 | 5 | `banca` | `07` | PDF estado de cuenta BCP | pendiente |
 
