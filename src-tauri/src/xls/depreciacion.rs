@@ -1,6 +1,9 @@
-use crate::domain::{asiento::LineaAsiento, error::AppError};
+use crate::domain::{
+    asiento::LineaAsiento,
+    error::AppError,
+    fecha::{nombre_mes, ultimo_dia_mes, validar_mes},
+};
 use calamine::{Data, Range, Reader, Xlsx};
-use chrono::NaiveDate;
 use std::io::Cursor;
 
 const CUENTA_GASTO: &str = "68613";
@@ -9,11 +12,6 @@ const DOC: &str = "00";
 const MONEDA: &str = "S";
 const C_COSTO_GASTO: &str = "3001";
 const ORIGEN: &str = "14";
-
-const MESES_NOMBRE: [&str; 12] = [
-    "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SETIEMBRE",
-    "OCTUBRE", "NOVIEMBRE", "DICIEMBRE",
-];
 
 /// Columna 1-indexed del input donde está la depreciación de cada mes.
 /// Saltos por columnas de totales semestrales y labels.
@@ -54,7 +52,7 @@ fn extract_asiento(
     let fecha = ultimo_dia_mes(anio, mes)?
         .format("%Y-%m-%d")
         .to_string();
-    let glosa = format!("DEPRECIACIÓN {} {anio}", MESES_NOMBRE[(mes - 1) as usize]);
+    let glosa = format!("DEPRECIACIÓN {} {anio}", nombre_mes(mes)?);
     // calamine usa coords absolutas con get_value. Headers en 1-indexed → 0-indexed:
     // - cuenta del activo: col 2 (1-idx) = col 1 (0-idx)
     // - mes: COL_MES (1-idx) - 1 = (0-idx)
@@ -98,7 +96,7 @@ fn extract_asiento(
     if lineas_haber.is_empty() {
         return Err(AppError::Validation(format!(
             "no hay depreciación para {} {anio}",
-            MESES_NOMBRE[(mes - 1) as usize]
+            nombre_mes(mes)?
         )));
     }
 
@@ -119,17 +117,6 @@ fn extract_asiento(
     }];
     lineas.extend(lineas_haber);
     Ok(lineas)
-}
-
-fn ultimo_dia_mes(anio: i32, mes: u8) -> Result<NaiveDate, AppError> {
-    let primer_dia_siguiente = if mes == 12 {
-        NaiveDate::from_ymd_opt(anio + 1, 1, 1)
-    } else {
-        NaiveDate::from_ymd_opt(anio, (mes + 1) as u32, 1)
-    };
-    primer_dia_siguiente
-        .and_then(|d| d.pred_opt())
-        .ok_or_else(|| AppError::Validation(format!("fecha invalida: {anio}-{mes}")))
 }
 
 fn redondear(v: f64) -> f64 {
@@ -170,30 +157,6 @@ mod tests {
             lineas
                 .iter()
                 .all(|l| l.origen == "14" && l.fecha == "2025-12-31" && l.doc == "00")
-        );
-    }
-
-    #[test]
-    fn ultimo_dia_diciembre_es_31() {
-        assert_eq!(
-            ultimo_dia_mes(2025, 12).unwrap(),
-            NaiveDate::from_ymd_opt(2025, 12, 31).unwrap()
-        );
-    }
-
-    #[test]
-    fn ultimo_dia_febrero_no_bisiesto() {
-        assert_eq!(
-            ultimo_dia_mes(2025, 2).unwrap(),
-            NaiveDate::from_ymd_opt(2025, 2, 28).unwrap()
-        );
-    }
-
-    #[test]
-    fn ultimo_dia_febrero_bisiesto() {
-        assert_eq!(
-            ultimo_dia_mes(2024, 2).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()
         );
     }
 
