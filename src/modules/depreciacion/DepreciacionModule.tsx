@@ -1,5 +1,7 @@
 import type { LineaAsiento } from "@/modules/asientos/types";
 import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeFile } from "@tauri-apps/plugin-fs";
 import { useState } from "react";
 
 export function DepreciacionModule() {
@@ -24,9 +26,20 @@ export function DepreciacionModule() {
         anio,
         tipoCambio,
       });
-      const b64 = await invoke<string>("generar_depreciacion_xls", { lineas });
-      descargar(b64, `depreciacion-${anio}-${String(mes).padStart(2, "0")}.xlsx`);
-      setInfo(`OK — ${lineas.length} líneas generadas.`);
+
+      const defaultName = `depreciacion-${anio}-${String(mes).padStart(2, "0")}.xlsx`;
+      const path = await save({
+        defaultPath: defaultName,
+        filters: [{ name: "Excel", extensions: ["xlsx"] }],
+      });
+      if (!path) {
+        setInfo("Cancelado.");
+        return;
+      }
+
+      const out = await invoke<number[]>("generar_depreciacion_xls", { lineas });
+      await writeFile(path, new Uint8Array(out));
+      setInfo(`OK — ${lineas.length} líneas guardadas en ${path}`);
     } catch (err) {
       setError(typeof err === "string" ? err : JSON.stringify(err));
     } finally {
@@ -80,19 +93,4 @@ export function DepreciacionModule() {
       {error && <p className="msg-error">{error}</p>}
     </section>
   );
-}
-
-function descargar(b64: string, filename: string) {
-  const bin = atob(b64);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  const blob = new Blob([arr], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }
