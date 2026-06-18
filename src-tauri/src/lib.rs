@@ -13,6 +13,8 @@ pub fn run() {
             commands::plan_de_cuentas::list_cuentas,
             commands::plan_de_cuentas::upsert_cuenta,
             commands::plan_de_cuentas::delete_cuenta,
+            commands::depreciacion::parse_depreciacion,
+            commands::depreciacion::generar_depreciacion_xls,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

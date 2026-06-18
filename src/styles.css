@@ -69,3 +69,37 @@ body {
   padding: 1.5rem;
   flex: 1;
 }
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin: 1rem 0;
+}
+
+.form-row label {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+.form-row input[type="number"] {
+  background: #161a23;
+  color: var(--color-fg);
+  border: 1px solid #2a3142;
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  width: 7rem;
+}
+
+input[type="file"] {
+  color: var(--color-muted);
+}
+
+.msg-ok {
+  color: #6fcf97;
+}
+
+.msg-error {
+  color: #ef6f6f;
+  white-space: pre-wrap;
+}
