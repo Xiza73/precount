@@ -40,3 +40,13 @@ pnpm-debug.log*
 # Claude Code — personal overrides (no commitear)
 CLAUDE.local.md
 .claude/settings.local.json
+
+# Data sensible del cliente — fixtures locales, NUNCA commitear.
+# Solo se versiona logo.png como asset de la app.
+public/input-*
+public/output-*
+public/sample-*
+public/*.pdf
+public/*.xls
+public/*.xlsx
+public/*.csv

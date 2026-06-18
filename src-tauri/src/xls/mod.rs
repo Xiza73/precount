@@ -1,4 +1,5 @@
-// Parsing (calamine) + generación (rust_xlsxwriter) de xls/csv en memoria.
-//
+// Parsing + generación de xls/csv en memoria.
 // REGLA DURA: nada de lo que pase por acá puede tocar disco.
 // Input: Vec<u8>. Output: Vec<u8> (que el frontend convierte a base64).
+
+pub mod output;
