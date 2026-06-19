@@ -2,6 +2,7 @@
 // REGLA DURA: nada de lo que pase por acá puede tocar disco.
 // Input: Vec<u8>. Output: Vec<u8> (que el frontend convierte a base64).
 
+pub mod banca;
 pub mod depreciacion;
 pub mod detracciones;
 pub mod output;

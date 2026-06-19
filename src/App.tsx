@@ -1,16 +1,18 @@
+import { BancaModule } from "@/modules/banca/BancaModule";
 import { DepreciacionModule } from "@/modules/depreciacion/DepreciacionModule";
 import { DetraccionesModule } from "@/modules/detracciones/DetraccionesModule";
 import { PlanCuentasModule } from "@/modules/plan-de-cuentas/PlanCuentasModule";
 import { PlanillaModule } from "@/modules/planilla/PlanillaModule";
 import { useState } from "react";
 
-type ModuleKey = "plan-de-cuentas" | "depreciacion" | "planilla" | "detracciones";
+type ModuleKey = "plan-de-cuentas" | "depreciacion" | "planilla" | "detracciones" | "banca";
 
 const TABS: { key: ModuleKey; label: string }[] = [
   { key: "plan-de-cuentas", label: "Plan de cuentas" },
   { key: "depreciacion", label: "Depreciación" },
   { key: "planilla", label: "Planilla" },
   { key: "detracciones", label: "Detracciones" },
+  { key: "banca", label: "Banca" },
 ];
 
 export function App() {
@@ -39,6 +41,7 @@ export function App() {
         {active === "depreciacion" && <DepreciacionModule />}
         {active === "planilla" && <PlanillaModule />}
         {active === "detracciones" && <DetraccionesModule />}
+        {active === "banca" && <BancaModule />}
       </main>
     </div>
   );
