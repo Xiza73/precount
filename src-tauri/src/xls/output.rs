@@ -112,14 +112,23 @@ fn write_linea(
     if !l.num_doc.is_empty() {
         set_text(ws, "J", r, &l.num_doc);
     }
-    // K: Fec.Doc — fila 2: "=+C2", filas siguientes: "=+K{r-1}"
-    let k_formula = if r == 2 { "+C2".to_string() } else { format!("+K{}", r - 1) };
+    // K: Fec.Doc. Si tiene valor distinto a la fecha del asiento → literal.
+    // Si está vacío o coincide con la fecha → fórmula (=+C2 / =+K{r-1}).
     let cell_k = ws.get_cell_mut(format!("K{r}").as_str());
-    cell_k.set_formula(k_formula);
+    if !l.fec_doc.is_empty() && l.fec_doc != l.fecha {
+        cell_k.set_value_number(excel_serial(parse_fecha(&l.fec_doc)?));
+    } else {
+        let k_formula = if r == 2 { "+C2".to_string() } else { format!("+K{}", r - 1) };
+        cell_k.set_formula(k_formula);
+    }
     set_num_format(cell_k, FECHA_FMT);
-    // L: Fec.Ven — "=+K{r}"
+    // L: Fec.Ven. Mismo criterio: literal si propio, fórmula =+K{r} si coincide.
     let cell_l = ws.get_cell_mut(format!("L{r}").as_str());
-    cell_l.set_formula(format!("+K{r}"));
+    if !l.fec_ven.is_empty() && l.fec_ven != l.fec_doc && l.fec_ven != l.fecha {
+        cell_l.set_value_number(excel_serial(parse_fecha(&l.fec_ven)?));
+    } else {
+        cell_l.set_formula(format!("+K{r}"));
+    }
     set_num_format(cell_l, FECHA_FMT);
     // M: Cod.Prov.Clie
     if !l.cod_prov_clie.is_empty() {
