@@ -25,6 +25,7 @@ calamine = "0.26"
 umya-spreadsheet = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+regex = "1"
 
 [dev-dependencies]
 pretty_assertions = "1"

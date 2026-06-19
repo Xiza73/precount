@@ -43,6 +43,7 @@ Por eso el MVP NO es "Compras SUNAT". Son **N transformadores** del input espec�
 | 2 | `depreciacion` | `14` | xlsx con cálculos | implementado |
 | 3 | `planilla` | `11` | xls (pre-carga 5 campos) + form editable | implementado |
 | 4 | `detracciones` | `13` | form tabla dinámica (Voucher 1: abonos) | implementado |
+| 4b | `detracciones` import | `13` | pegar texto del PDF BdN → extrae VA 1721 del mes | implementado |
 | 5 | `banca` | `07` | PDF estado de cuenta BCP | pendiente |
 
 Cada módulo solo implementa `parse_input(bytes) → Vec<LineaAsiento>`. Reusan:

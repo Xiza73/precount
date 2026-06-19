@@ -33,9 +33,43 @@ export function DetraccionesModule() {
   const [anio, setAnio] = useState(2025);
   const [tipoCambio, setTipoCambio] = useState(3.368);
   const [abonos, setAbonos] = useState<Abono[]>(() => [nuevoAbono()]);
+  const [textoPdf, setTextoPdf] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  async function onExtraer() {
+    if (!textoPdf.trim()) {
+      setError("Pegá el texto del estado de cuenta primero.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const extraidos = await invoke<{ monto: number; dia: number }[]>(
+        "extraer_abonos_detracciones",
+        { texto: textoPdf, mes, anio },
+      );
+      if (extraidos.length === 0) {
+        setInfo("No se encontraron abonos VA 1721 del mes en el texto.");
+        return;
+      }
+      setAbonos(
+        extraidos.map((e) => ({
+          ...nuevoAbono(),
+          monto: e.monto.toFixed(2),
+        })),
+      );
+      setInfo(
+        `Extraídos ${extraidos.length} abonos del texto. Completá RUC, razón social y N° doc.`,
+      );
+    } catch (err) {
+      setError(typeof err === "string" ? err : JSON.stringify(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const updateAbono = (i: number, patch: Partial<Abono>) =>
     setAbonos((prev) => prev.map((a, idx) => (idx === i ? { ...a, ...patch } : a)));
@@ -124,6 +158,30 @@ export function DetraccionesModule() {
           />
         </label>
       </div>
+
+      <fieldset className="voucher">
+        <legend>Pegar texto del estado de cuenta BdN (opcional)</legend>
+        <p style={{ fontSize: "0.8125rem", color: "var(--color-muted)", margin: "0 0 0.5rem" }}>
+          Copiá el contenido del PDF del Banco de la Nación (seleccionable) y pegalo acá. La app
+          extrae los abonos <code>VA 1721</code> del mes y los pre-carga abajo. RUC, razón social y
+          N° doc los completás vos.
+        </p>
+        <textarea
+          value={textoPdf}
+          onChange={(e) => setTextoPdf(e.target.value)}
+          placeholder="VA 1721 | | 1,526.00 | 13,903.95 | 10/11/2025 ..."
+          rows={6}
+          className="pdf-textarea"
+        />
+        <button
+          type="button"
+          onClick={onExtraer}
+          disabled={busy || !textoPdf.trim()}
+          className="btn-secondary"
+        >
+          Extraer abonos del texto
+        </button>
+      </fieldset>
 
       <fieldset className="voucher">
         <legend>
