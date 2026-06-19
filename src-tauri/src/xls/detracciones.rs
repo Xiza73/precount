@@ -1,9 +1,10 @@
 use crate::domain::{
     asiento::LineaAsiento,
     error::AppError,
-    fecha::{nombre_mes, ultimo_dia_mes},
+    fecha::{nombre_mes, ultimo_dia_mes, validar_mes},
 };
-use serde::Deserialize;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
 
 const ORIGEN: &str = "13";
 const DOC_ABONO: &str = "01";
@@ -109,6 +110,50 @@ pub fn construir_detracciones(
     Ok(lineas)
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AbonoExtraido {
+    pub monto: f64,
+    /// Día del mes (1-31).
+    pub dia: u8,
+}
+
+/// Extrae los abonos (`VA 1721`) del **texto** del estado de cuenta de Banco
+/// de la Nación. El user copia el texto del PDF (selectable) y lo pega en la
+/// UI; este parser lo procesa.
+///
+/// Filtra estrictamente: solo retiene líneas con `VA 1721` cuya fecha caiga
+/// dentro del mes pedido. RUC, razón social y num_doc no están en el estado
+/// de cuenta — los carga el contador en la tabla.
+pub fn extraer_abonos_de_texto(
+    text: &str,
+    mes: u8,
+    anio: i32,
+) -> Result<Vec<AbonoExtraido>, AppError> {
+    validar_mes(mes)?;
+    // Patrón observado: línea con "VA 1721" + monto (formato 1,526.00) + fecha DD/MM/AAAA.
+    // Los cargos NOT 1612 NO matchean este regex (descartados por filtro VA 1721).
+    let re_abono = Regex::new(
+        r"VA\s+1721[^\n]*?(\d{1,3}(?:,\d{3})*\.\d{2})[^\n]*?(\d{2})/(\d{2})/(\d{4})",
+    )
+    .map_err(|e| AppError::Internal(format!("regex inválida: {e}")))?;
+
+    let mut abonos = Vec::new();
+    for cap in re_abono.captures_iter(text) {
+        let monto: f64 = cap[1]
+            .replace(',', "")
+            .parse()
+            .map_err(|e| AppError::Validation(format!("monto invalido `{}`: {e}", &cap[1])))?;
+        let dia: u8 = cap[2].parse().unwrap_or(0);
+        let mes_doc: u8 = cap[3].parse().unwrap_or(0);
+        let anio_doc: i32 = cap[4].parse().unwrap_or(0);
+        if mes_doc == mes && anio_doc == anio && dia > 0 {
+            abonos.push(AbonoExtraido { monto, dia });
+        }
+    }
+    Ok(abonos)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -194,5 +239,45 @@ mod tests {
         let mut input = caso_referencia();
         input.abonos[0].cuenta = String::new();
         assert!(construir_detracciones(&input).is_err());
+    }
+
+    /// Mock con el formato literal del estado de cuenta BdN del cliente.
+    /// Sintético para que el test pase en CI sin necesitar el PDF del cliente.
+    const TEXTO_MOCK_NOV_2025: &str = "\
+SALDO ANTERIOR | | 31/10/2025 | 12,377.95 |
+VA 1721 | | 1,526.00 | 13,903.95 | 10/11/2025
+VA 1721 | | 896.00 | | 11/11/2025
+VA 1721 | | 623.00 | 15,422.95 | 11/11/2025
+VA 1721 | | 908.00 | 16,330.95 | 17/11/2025
+NOT 1612 | 910.00 | | | 21/11/2025
+NOT 1612 | 1,053.00 | | | 21/11/2025
+NOT 1612 | 693.00 | | 13,674.95 | 21/11/2025
+NOT 1612 | 1,268.00 | | 12,406.95 | 24/11/2025
+VA 1721 | | 4,036.00 | | 28/11/2025
+VA 1721 | | 1,399.00 | 17,841.95 | 28/11/2025
+";
+
+    #[test]
+    fn extraer_abonos_filtra_solo_VA_1721_del_mes() {
+        let r = extraer_abonos_de_texto(TEXTO_MOCK_NOV_2025, 11, 2025).expect("ok");
+        assert_eq!(r.len(), 6, "esperados 6 abonos VA 1721, vi {r:?}");
+        let total: f64 = r.iter().map(|a| a.monto).sum();
+        assert!((total - 9388.0).abs() < 0.01, "total={total}");
+        let dias: Vec<u8> = r.iter().map(|a| a.dia).collect();
+        assert_eq!(dias, vec![10, 11, 11, 17, 28, 28]);
+        let montos: Vec<f64> = r.iter().map(|a| a.monto).collect();
+        assert_eq!(montos, vec![1526.0, 896.0, 623.0, 908.0, 4036.0, 1399.0]);
+    }
+
+    #[test]
+    fn extraer_abonos_ignora_otros_meses() {
+        let r = extraer_abonos_de_texto(TEXTO_MOCK_NOV_2025, 12, 2025).expect("ok");
+        assert!(r.is_empty(), "no debería haber abonos de diciembre, vi {r:?}");
+    }
+
+    #[test]
+    fn extraer_abonos_texto_vacio() {
+        let r = extraer_abonos_de_texto("", 11, 2025).expect("ok");
+        assert!(r.is_empty());
     }
 }

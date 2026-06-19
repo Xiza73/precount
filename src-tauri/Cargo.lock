@@ -2816,6 +2816,7 @@ dependencies = [
  "calamine",
  "chrono",
  "pretty_assertions",
+ "regex",
  "serde",
  "serde_json",
  "tauri",

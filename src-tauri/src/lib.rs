@@ -20,6 +20,7 @@ pub fn run() {
             commands::planilla::generar_planilla_xls,
             commands::planilla::resumir_planilla,
             commands::detracciones::generar_detracciones_xls,
+            commands::detracciones::extraer_abonos_detracciones,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

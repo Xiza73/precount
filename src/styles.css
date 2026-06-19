@@ -217,3 +217,15 @@ input[type="file"] {
 .abonos input[type="number"] {
   text-align: right;
 }
+
+.pdf-textarea {
+  width: 100%;
+  background: #161a23;
+  color: var(--color-fg);
+  border: 1px solid #2a3142;
+  border-radius: 4px;
+  padding: 0.5rem;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.78rem;
+  resize: vertical;
+}
